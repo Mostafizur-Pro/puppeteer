@@ -1,147 +1,156 @@
-const puppeteer = require("puppeteer");
+const puppeteer = require("puppeteer-core"); // Use puppeteer-core for custom browser paths
 const XLSX = require("xlsx");
+const path = require("path");
+
+// Path to the Edge executable
+const EDGE_PATH =
+  "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe";
+
+// Utility function to add a delay
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// Function to block unnecessary resources for faster page loads
+const blockUnnecessaryResources = async (page) => {
+  await page.setRequestInterception(true);
+  page.on("request", (req) => {
+    const resourceType = req.resourceType();
+    if (
+      resourceType === "image" ||
+      resourceType === "stylesheet" ||
+      resourceType === "font"
+    ) {
+      req.abort();
+    } else {
+      req.continue();
+    }
+  });
+};
 
 const scrapeWebsite = async () => {
-  // Launch a browser
-  const browser = await puppeteer.launch({ headless: true });
+  const browser = await puppeteer.launch({
+    headless: false, // Set to false for debugging
+    executablePath: EDGE_PATH, // Specify the path to Edge
+    defaultViewport: null, // Use full screen
+  });
+
   const page = await browser.newPage();
 
-  // Navigate to the target website
-  await page.goto(
-    "https://shopping.indiamart.com/search.php?ss=Ladies%20Wear",
-    {
-      waitUntil: "networkidle2",
+  await blockUnnecessaryResources(page);
+
+  const categoryList = ["Cumin Seed Oil"]; // Add more categories as needed
+
+  const products = [];
+  const scrapedIds = new Set(); // To track unique product IDs
+  const PRODUCT_LIMIT = 100; // Limit the number of products per category
+
+  for (const category of categoryList) {
+    console.log(`Scraping category: ${category}`);
+    const url = `https://dir.indiamart.com/search.mp?ss=${encodeURIComponent(
+      category
+    )}&v=4&mcatid=36284&catid=411&prdsrc=1`;
+
+    try {
+      // Set timeout to 0 (indefinite waiting)
+      await page.goto(url, { waitUntil: "domcontentloaded", timeout: 0 });
+    } catch (err) {
+      console.error(`Failed to load category: ${category}`);
+      continue;
     }
-  );
 
-  // Selectors for product elements
-  const selectors = {
-    productName: ".prd_nam",
-    address: ".addrs svg",
-    price: ".prc",
-    companyName: ".companyname a",
-    legalStatus: ".legal-status-selector",
-    annualTurnover: ".annual-turnover-selector",
-    mobileForm: ".mobile-form-selector",
-    packagingSize: ".clr1",
-    packagingType: ".packaging-type-selector",
-    brand: ".brand-selector",
-    plantPart: ".plant-part-selector",
-    usage: ".usage-selector",
-    moisture: ".moisture-selector",
-    botanicalName: ".botanical-name-selector",
-    color: ".prd_isq .clr1 b",
-    shelfLife: ".shelf-life-selector",
-    feature: ".feature-selector",
-    minimumOrder: ".minimum-order-selector",
-    quantity: ".quantity-selector",
-  };
+    // Wait for the products to load
+    try {
+      await page.waitForSelector(".card", { timeout: 30000 });
+    } catch (err) {
+      console.error(`No products found for category: ${category}`);
+      continue;
+    }
 
-  // Extract data
-  const products = await page.evaluate((selectors) => {
-    const productElements = Array.from(
-      document.querySelectorAll(selectors.productName)
-    );
-    return productElements.map((element, index) => {
-      return {
-        productName: element.innerText.trim(),
-        address:
-          document
-            .querySelectorAll(selectors.address)
-            [index]?.innerText.trim() || "N/A",
-        price:
-          document.querySelectorAll(selectors.price)[index]?.innerText.trim() ||
-          "N/A",
-        companyName:
-          document
-            .querySelectorAll(selectors.companyName)
-            [index]?.innerText.trim() || "N/A",
-        legalStatus:
-          document
-            .querySelectorAll(selectors.legalStatus)
-            [index]?.innerText.trim() || "N/A",
-        annualTurnover:
-          document
-            .querySelectorAll(selectors.annualTurnover)
-            [index]?.innerText.trim() || "N/A",
-        mobileForm:
-          document
-            .querySelectorAll(selectors.mobileForm)
-            [index]?.innerText.trim() || "N/A",
-        packagingSize:
-          document
-            .querySelectorAll(selectors.packagingSize)
-            [index]?.innerText.trim() || "N/A",
-        packagingType:
-          document
-            .querySelectorAll(selectors.packagingType)
-            [index]?.innerText.trim() || "N/A",
-        brand:
-          document.querySelectorAll(selectors.brand)[index]?.innerText.trim() ||
-          "N/A",
-        plantPart:
-          document
-            .querySelectorAll(selectors.plantPart)
-            [index]?.innerText.trim() || "N/A",
-        usage:
-          document.querySelectorAll(selectors.usage)[index]?.innerText.trim() ||
-          "N/A",
-        moisture:
-          document
-            .querySelectorAll(selectors.moisture)
-            [index]?.innerText.trim() || "N/A",
-        botanicalName:
-          document
-            .querySelectorAll(selectors.botanicalName)
-            [index]?.innerText.trim() || "N/A",
-        color:
-          document.querySelectorAll(selectors.color)[index]?.innerText.trim() ||
-          "N/A",
-        shelfLife:
-          document
-            .querySelectorAll(selectors.shelfLife)
-            [index]?.innerText.trim() || "N/A",
-        feature:
-          document
-            .querySelectorAll(selectors.feature)
-            [index]?.innerText.trim() || "N/A",
-        minimumOrder:
-          document
-            .querySelectorAll(selectors.minimumOrder)
-            [index]?.innerText.trim() || "N/A",
-        quantity:
-          document
-            .querySelectorAll(selectors.quantity)
-            [index]?.innerText.trim() || "N/A",
-      };
-    });
-  }, selectors);
+    let hasMoreResults = true;
 
-  //   console.log("Scraped Products:", products);
+    while (hasMoreResults && products.length < PRODUCT_LIMIT) {
+      const initialProductCount = products.length; // Record the count before adding new data
 
-  // Save data to Excel
+      const productElements = await page.evaluate(() => {
+        const products = [];
+        document.querySelectorAll(".card").forEach((card) => {
+          const id = card.getAttribute("id") || "N/A";
+          const productName =
+            card.querySelector(".producttitle a")?.textContent.trim() || "N/A";
+          const packagingType =
+            card
+              .querySelector("[data-isq]")
+              ?.textContent.match(/Packagi ng Type%3A([^%]*)%23/)?.[1] || "N/A";
+          const packagingSize =
+            card
+              .querySelector("[data-isq]")
+              ?.textContent.match(/Packaging Size%3A([^%]*)%23/)?.[1] || "N/A";
+          const price =
+            card.querySelector(".price")?.textContent.trim() || "N/A";
+          const companyName =
+            card.querySelector(".companyname a")?.textContent.trim() || "N/A";
+          const mobile =
+            card.querySelector(".contactnumber .pns_h")?.textContent.trim() ||
+            "N/A";
+
+          products.push({
+            id,
+            productName,
+            packagingType,
+            packagingSize,
+            price,
+            companyName,
+            mobile,
+          });
+        });
+        return products;
+      });
+
+      // Filter out duplicate products
+      productElements.forEach((product) => {
+        if (!scrapedIds.has(product.id)) {
+          scrapedIds.add(product.id); // Mark this ID as scraped
+          products.push(product);
+        }
+      });
+
+      console.log(`Scraped ${products.length} unique products so far.`);
+
+      if (products.length >= PRODUCT_LIMIT) {
+        console.log(`Reached product limit of ${PRODUCT_LIMIT}`);
+        break;
+      }
+
+      // Stop scraping if no new data is added
+      if (products.length === initialProductCount) {
+        console.log("No new data found. Stopping scrape...");
+        break;
+      }
+
+      // Check for the "Show More" button and click if available
+      const showMoreButton = await page.$(".showmoreresultsdiv button");
+      if (showMoreButton) {
+        await showMoreButton.click();
+        console.log("Clicked 'Show More' button...");
+        await delay(2000); // Wait for more products to load
+      } else {
+        hasMoreResults = false;
+      }
+    }
+  }
+
+  // Save scraped data to Excel
   const worksheet = XLSX.utils.json_to_sheet(products);
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, worksheet, "Products");
-
-  // Write the file
   XLSX.writeFile(workbook, "products.xlsx");
 
-  //   console.log("Data saved to products.xlsx");
+  console.log(
+    `Scraping complete. Data saved to "products.xlsx". Total unique products scraped: ${products.length}`
+  );
 
-  // Close the browser
   await browser.close();
 };
 
-scrapeWebsite();
-
-/*
-
-https://www.indiamart.com/proddetail/ipm-cumin-seed-2855103226173.html?pos=1&kwd=cumin%20seed%20processor&tags=A||||8228.275|Price|product|||IVEG|rsf:gd-|-qr_nm:gd|res:RC5|com-cf:nl|ptrs:na|ktp:N0|mc:11270|stype:attr=1|cat:15|mtp:S|qry_typ:P|lang:en|wc:3|cs:8061|v=4|r=4
-
-https://www.indiamart.com/proddetail/brown-cumin-seed-26981104473.html?pos=2&DualProdscaps
-https://www.indiamart.com/proddetail/brown-cumin-seeds-2057507033.html?pos=1&nh=Y&DualProdscaps
-https://www.indiamart.com/proddetail/brown-jeera-seed-2855126785855.html?pos=1&nh=Y&DualProdscaps
-
-
-*/
+scrapeWebsite().catch((err) => {
+  console.error("Error occurred during scraping:", err);
+});

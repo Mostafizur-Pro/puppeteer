@@ -62,3 +62,37 @@ const scrapeWebsite = async () => {
 };
 
 scrapeWebsite();
+
+/*
+
+  const categoryList = [
+    "Cumin Seed Oil",
+    "Essential Oils",
+    "Refresher Oils",
+    "Synthetic Essential Oils",
+    "Anti Cellulite Essential Oil",
+    "Anti Stress Essential Oils",
+    "Aromatherapy Essential Oils",
+    "Hair Care Essential Oils",
+    "Skin Care Essential Oils",
+    "Medicinal Essential Oils",
+    "Mustard Essential Oil",
+    "Davana Oil",
+    "Kewra Oil",
+    "Tea Tree Oil",
+    "Antibacterial Essential Oils",
+    "Nutmeg Oil",
+    "Cassia Oil",
+    "Emu Oil",
+    "Poppy Seed Oil",
+  ];
+
+
+https://www.indiamart.com/proddetail/ipm-cumin-seed-2855103226173.html?pos=1&kwd=cumin%20seed%20processor&tags=A||||8228.275|Price|product|||IVEG|rsf:gd-|-qr_nm:gd|res:RC5|com-cf:nl|ptrs:na|ktp:N0|mc:11270|stype:attr=1|cat:15|mtp:S|qry_typ:P|lang:en|wc:3|cs:8061|v=4|r=4
+
+https://www.indiamart.com/proddetail/brown-cumin-seed-26981104473.html?pos=2&DualProdscaps
+https://www.indiamart.com/proddetail/brown-cumin-seeds-2057507033.html?pos=1&nh=Y&DualProdscaps
+https://www.indiamart.com/proddetail/brown-jeera-seed-2855126785855.html?pos=1&nh=Y&DualProdscaps
+
+
+*/
